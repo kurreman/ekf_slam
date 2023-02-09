@@ -19,6 +19,17 @@ def observation_direct(x):
     # assume that we get the local landmark measurement
     return np.array([x[3] - x[0], x[4] - x[1]])
 
+def observation_orientation(x):
+    # include orientation of landmark
+    return np.array([cos(x[2]) * (x[3] - x[0]) + sin(x[2]) * (x[4] - x[1]),
+                     -sin(x[2]) * (x[3] - x[0]) + cos(x[2]) * (x[4] - x[1]),
+                     x[5] - x[2]])
+
+def H_orientation(x):
+    return np.array([[-cos(x[2]), -sin(x[2]), -sin(x[2]) * (x[3] - x[0]) + cos(x[2]) * (x[4] - x[1]), cos(x[2]), sin(x[2]), 0],
+                     [sin(x[2]), -cos(x[2]), -cos(x[2]) * (x[3] - x[0]) - sin(x[2]) * (x[4] - x[1]), -sin(x[2]), cos(x[2]), 0],
+                     [0, 0, -1, 0, 0, 1]])
+
 def H_direct(x):
     return np.array([[-1, 0., 0., 1., 0.],
                      [0., -1., 0., 0., 1.]])
@@ -26,16 +37,17 @@ def H_direct(x):
 
 def motion(x, u, dt):
     # assume velocity based motion model: control input u = [v, w] where v and w are trans. and angular velocity
-    return x + dt * np.array([u[0] * cos(x[2]), u[0] * sin(x[2]), u[1], 0., 0.])
+    return x + dt * np.array([u[0] * cos(x[2]), u[0] * sin(x[2]), u[1], 0., 0., 0.])
 
 
 def F_jac(x, u, dt):
     # jacobian of motion model
-    return np.array([[1., 0., - u[0] * dt * sin(x[2]), 0., 0.],
-                     [0., 1., + u[0] * dt * cos(x[2]), 0., 0.],
-                     [0., 0., 1., 0., 0.],
-                     [0., 0., 0., 1., 0.],
-                     [0., 0., 0., 0., 1.]])
+    return np.array([[1., 0., - u[0] * dt * sin(x[2]), 0., 0., 0.],
+                     [0., 1., + u[0] * dt * cos(x[2]), 0., 0., 0.],
+                     [0., 0., 1., 0., 0., 0.],
+                     [0., 0., 0., 1., 0., 0.],
+                     [0., 0., 0., 0., 1., 0.],
+                     [0., 0., 0., 0., 0., 1.]])
 
 
 class EKFSLAM:
@@ -64,20 +76,15 @@ class EKFSLAM:
         self.n_landmarks = 1
 
         # initialize state (Assuming 2D pose of robot + only positions of landmarks)
-        self.x = np.hstack([x0, 1.2,1.9])#np.zeros(2 * self.n_landmarks)])
+        self.x = np.hstack([x0, np.zeros(3 * self.n_landmarks)])
 
-        # intialize covariance matrix (robot pose: certain, landmark positions: uncertain)
-        # self.cov = 10000 * np.ones((5, 5))
-        # self.cov[0:3, 0:3] = np.zeros((3, 3))
-
-        diag = [0.02, 0.02, 0.1,10000,10000]
-        self.cov = np.diag(diag)
+        self.cov = np.diag(np.hstack([np.zeros(3), 1000 * np.ones(3 * self.n_landmarks)]))
 
         # process noise (motion_model)
-        self.Q = np.diag([0.005, 0.005, 0.002, 0., 0.])
+        self.Q = np.diag([0.005, 0.005, 0.002, 0., 0., 0.])
 
         # measurement noise (single observation)
-        self.R = np.diag([0.1, 0.01])
+        self.R = np.diag([0.1, 0.1, 0.1])
 
     # ---------------------------------------------------------------------
     # ---------------------- prediction step-------------------------------
@@ -90,7 +97,7 @@ class EKFSLAM:
         # linearized motion model
         F = F_jac(self.x, u, dt)
 
-        self.cov = F @ self.cov @ F.T + dt * self.Q
+        self.cov = np.matmul(F, np.matmul(self.cov, F.T)) + dt * self.Q
         self.x = mu
 
     # ---------------------------------------------------------------------
@@ -98,26 +105,25 @@ class EKFSLAM:
     # ---------------------------------------------------------------------
 
     def update(self, z, id=0):
-        # measurement z = [r, phi] (distance to landmark and angle expressed in local frame
-
         if id not in self.landmarks_detected:
             self.landmarks_detected.append(id)
-            self.x[3] = self.x[0] + cos(self.x[2] + z[1]) * z[0]
-            self.x[4] = self.x[1] + sin(self.x[2] + z[1]) * z[0]
+            self.x[3] = self.x[0] + cos(self.x[2]) * z[0] - sin(self.x[2]) * z[1]
+            self.x[4] = self.x[1] - sin(self.x[2]) * z[0] + cos(self.x[2]) * z[1]
+            self.x[5] = self.x[2] + z[2]
 
         # predict measurement using observation model
-        z_hat = observation_direct(self.x)
+        z_hat = observation_orientation(self.x)
 
         # jacobian of observation model
-        H = H_direct(self.x)
+        H = H_orientation(self.x)
 
         # compute Kalman gain
-        K = self.cov @ H.T @ np.linalg.inv(H @ self.cov @ H.T + self.R)
+        K = np.matmul(self.cov, np.matmul(H.T, np.linalg.inv(np.matmul(H, np.matmul(self.cov, H.T)) + self.R)))
 
         # correct state
         self.x += K.dot(z - z_hat)
-        self.cov = (np.eye(5) - K @ H) @ self.cov
-        print(self.cov)
+        self.cov = np.matmul((np.eye(6) - np.matmul(K, H)), self.cov)
+        print(self.x)
 
     # ---------------------------------------------------------------------
     # ---------------------- Visualizations -------------------------------

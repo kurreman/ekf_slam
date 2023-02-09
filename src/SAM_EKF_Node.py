@@ -3,10 +3,12 @@
 import rospy
 from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped
 from sensor_msgs.msg import Imu
-
+import tf2_geometry_msgs
 
 from EKFSLAM import *
-
+import tf2_ros
+from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
+from tf.transformations import translation_matrix, quaternion_matrix
 
 class EKFSLAMNode(object):
     # ---------------------------------------------------------------------
@@ -43,6 +45,18 @@ class EKFSLAMNode(object):
         # imu integrated velocity
         self.v_integrated = np.zeros(2)
 
+        # last updated velocity and timestep
+        self.pos_last = np.array([0., 0.])
+        self.t_last = rospy.get_time()
+        self.theta_last = 0.
+
+        # tfs
+        self.tf_buffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tf_buffer)
+
+        self.base_frame = rospy.get_param('/planner_node/base_frame_name','/poiu')
+        self.docking_frame = rospy.get_param('/planner_node/docking_frame_name', '/uiop')
+
     def init_subscribers(self):
         self.subscribers["RelativePose"] = rospy.Subscriber("/docking_station/feature_model/estimated_pose",
                                                             PoseWithCovarianceStamped,
@@ -61,25 +75,48 @@ class EKFSLAMNode(object):
                              msg.linear_acceleration.y,
                              msg.linear_acceleration.z])
 
-        # TODO: which coordinate frame?
         self.gyro = np.array([msg.angular_velocity.x,
                               msg.angular_velocity.y,
                               msg.angular_velocity.z])
 
         self.v_integrated += self.acc[0:2] * self.dt
 
-    def predictEKF(self, msg):
-        controls = msg.data
+    def predictEKF(self, controls):
         self.ekf.predict(controls, self.dt)
         self.publish_poses()
 
     def updateEKF(self, msg):
-        meas = np.array([msg.position.x, msg.position.y])
+        # obtain velocity and angular velocity through numerical differentiation
+        v = np.linalg.norm(self.ekf.x[0:2] - self.pos_last) / (rospy.get_time() - self.t_last)
+        w = (self.ekf.x[2] - self.theta_last) / (rospy.get_time() - self.t_last)
+
+        # update last values
+        self.pos_last = self.ekf.x[0:2]
+        self.theta_last = self.ekf.x[2]
+        self.t_last = rospy.get_time()
+
+        # predict EKF
+        self.ekf.predict(np.array([v, w]), rospy.get_time() - self.t_last)
+
+        print("vel: " + str(v))
+        print("w: " + str(w))
+
+
+        meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
+        meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(msg.pose, meas_sam)
+
+        qw = meas_sam_transformed.pose.orientation.w
+        qx = meas_sam_transformed.pose.orientation.x
+        qy = meas_sam_transformed.pose.orientation.y
+        qz = meas_sam_transformed.pose.orientation.z
+        rpy = euler_from_quaternion([qx, qy, qz, qw])
+
+        meas = np.array([meas_sam_transformed.pose.position.x,
+                         meas_sam_transformed.pose.position.y,
+                         rpy[2]])
+        print(meas)
         self.ekf.update(meas)
         self.publish_poses()
-
-        # TODO: reset integrated velocity
-        self.v_integrated = np.zeros(2)
 
     def publish_poses(self):
         SAM_pose = Pose2D()
@@ -94,7 +131,7 @@ class EKFSLAMNode(object):
         landmark_pose.y = self.ekf.x[4]
         landmark_pose.theta = 0.0
 
-        self.publishers["landmark_pose"].publish(landmark_pose)
+        self.publishers["station_pose"].publish(landmark_pose)
 
 
 
