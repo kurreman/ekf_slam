@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped
+from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped, PoseWithCovariance
 from sensor_msgs.msg import Imu
 import tf2_geometry_msgs
 
@@ -68,6 +68,7 @@ class EKFSLAMNode(object):
         """ initialize ROS publishers and stores them in a dictionary"""
         # position of segway in world frame
         self.publishers["robot_pose"] = rospy.Publisher("~robot_pose", Pose2D, queue_size=1)
+        self.publishers["SAM_PoseCov"] = rospy.Publisher("sam/EstimatedPose", PoseWithCovarianceStamped, queue_size=1)
         self.publishers["station_pose"] = rospy.Publisher("~covariance", Pose2D, queue_size=1)
 
     def process_imu(self, msg):
@@ -132,6 +133,29 @@ class EKFSLAMNode(object):
         landmark_pose.theta = 0.0
 
         self.publishers["station_pose"].publish(landmark_pose)
+
+        # Publish pose with covariance
+        pose3D = PoseWithCovarianceStamped()
+        pose3D.header.stamp = rospy.Time.now()
+        pose3D.header.frame_id = "world_ned"
+        pose3D.pose.pose.position.y = self.ekf.x[1]
+        pose3D.pose.pose.position.z = -1.
+
+        quat = quaternion_from_euler(0., 0., self.ekf.x[2])
+        pose3D.pose.pose.orientation.x = quat[0]
+        pose3D.pose.pose.orientation.y = quat[1]
+        pose3D.pose.pose.orientation.z = quat[2]
+        pose3D.pose.pose.orientation.w = quat[3]
+
+        pose3D.pose.covariance = [self.ekf.cov[0, 0], self.ekf.cov[0, 1], 0., 0., 0., self.ekf.cov[0, 2]] +\
+                            [self.ekf.cov[1, 0], self.ekf.cov[1, 1], 0., 0., 0., self.ekf.cov[1, 2]] + \
+                            [0., 0., 0., 0., 0., 0.] +\
+                            [0., 0., 0., 0., 0., 0.] + \
+                            [0., 0., 0., 0., 0., 0.] + \
+                            [self.ekf.cov[2, 0], self.ekf.cov[2, 1], 0., 0., 0., self.ekf.cov[2, 2]]
+
+        self.publishers["SAM_PoseCov"].publish(pose3D)
+
 
 
 
