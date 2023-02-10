@@ -87,6 +87,7 @@ class EKFSLAMNode(object):
         self.publish_poses()
 
     def updateEKF(self, msg):
+        print("I'm here!")
         # obtain velocity and angular velocity through numerical differentiation
         v = np.linalg.norm(self.ekf.x[0:2] - self.pos_last) / (rospy.get_time() - self.t_last)
         w = (self.ekf.x[2] - self.theta_last) / (rospy.get_time() - self.t_last)
@@ -104,19 +105,19 @@ class EKFSLAMNode(object):
 
 
         base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link", "docking_station_ned",
-                                                               msg.header.stamp, rospy.Duration(0.00001))
+                                                               rospy.Time(0), rospy.Duration(1.0))
         base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link",
-                                                               msg.header.stamp, rospy.Duration(0.00001))
+                                                               rospy.Time(0), rospy.Duration(1.0))
         # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
         # ds_to_ned = self.tf_buffer.lookup_transform("docking_station_link", "docking_station_ned", rospy.Time.now(), rospy.Duration(0.00001))
-        base_to_ds = Pose()
-        base_to_ds.position.x = base_tfm_ds.transform.translation.x
-        base_to_ds.position.y = base_tfm_ds.transform.translation.y
-        base_to_ds.position.z = base_tfm_ds.transform.translation.z
-        base_to_ds.orientation.x = base_tfm_ds.transform.rotation.x
-        base_to_ds.orientation.y = base_tfm_ds.transform.rotation.y
-        base_to_ds.orientation.z = base_tfm_ds.transform.rotation.z
-        base_to_ds.orientation.w = base_tfm_ds.transform.rotation.w
+        base_to_ds = PoseWithCovariance()
+        base_to_ds.pose.position.x = base_tfm_ds.transform.translation.x
+        base_to_ds.pose.position.y = base_tfm_ds.transform.translation.y
+        base_to_ds.pose.position.z = base_tfm_ds.transform.translation.z
+        base_to_ds.pose.orientation.x = base_tfm_ds.transform.rotation.x
+        base_to_ds.pose.orientation.y = base_tfm_ds.transform.rotation.y
+        base_to_ds.pose.orientation.z = base_tfm_ds.transform.rotation.z
+        base_to_ds.pose.orientation.w = base_tfm_ds.transform.rotation.w
         meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(base_to_ds, base_tfm_ned)
         # meas_sam_transformed_ = tf2_geometry_msgs.do_transform_pose(msg.pose, ds_to_ned)
         # meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(meas_sam_transformed_,
