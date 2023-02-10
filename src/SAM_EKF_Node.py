@@ -103,17 +103,30 @@ class EKFSLAMNode(object):
         print("w: " + str(w))
 
 
-        meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
-        meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(msg.pose, meas_sam)
+        base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link", "docking_station_ned",
+                                                               msg.header.stamp, rospy.Duration(0.00001))
+        base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link",
+                                                               msg.header.stamp, rospy.Duration(0.00001))
+        # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
+        # ds_to_ned = self.tf_buffer.lookup_transform("docking_station_link", "docking_station_ned", rospy.Time.now(), rospy.Duration(0.00001))
+        base_to_ds = Pose()
+        base_to_ds.position = base_tfm_ds.transform.translation.x
+        base_to_ds.position = base_tfm_ds.translation.yvv # meas_sam_transformed_ = tf2_geometry_msgs.do_transform_pose(msg.pose, ds_to_ned)
+        # meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(meas_sam_transformed_,
+                                                                   # meas_sam)
 
-        qw = meas_sam_transformed.pose.orientation.w
-        qx = meas_sam_transformed.pose.orientation.x
-        qy = meas_sam_transformed.pose.orientation.y
-        qz = meas_sam_transformed.pose.orientation.z
+        # qw = meas_sam_transformed.pose.orientation.w
+        # qx = meas_sam_transformed.pose.orientation.x
+        # qy = meas_sam_transformed.pose.orientation.y
+        # qz = meas_sam_transformed.pose.orientation.z
+        qw = meas_sam_transformed.transform.rotation.w
+        qx = meas_sam_transformed.transform.rotation.x
+        qy = meas_sam_transformed.transform.rotation.y
+        qz = meas_sam_transformed.transform.rotation.z
         rpy = euler_from_quaternion([qx, qy, qz, qw])
 
-        meas = np.array([meas_sam_transformed.pose.position.x,
-                         meas_sam_transformed.pose.position.y,
+        meas = np.array([meas_sam_transformed.transform.translation.x,
+                         meas_sam_transformed.transform.translation.y,
                          rpy[2]])
         print(meas)
         self.ekf.update(meas)
