@@ -49,6 +49,16 @@ def F_jac(x, u, dt):
                      [0., 0., 0., 0., 1., 0.],
                      [0., 0., 0., 0., 0., 1.]])
 
+def motion_v(x, v, w, dt):
+    # assume velocity based motion model: control input u = [v, w] where v and w are trans. and angular velocity
+    return x + dt * np.array([v[0], v[1], w, 0., 0., 0.])
+
+
+def F_jac_v(x, v, w, dt):
+    # jacobian of motion model
+    return np.eye(6)
+
+
 
 class EKFSLAM:
     def __init__(self, x0):
@@ -81,22 +91,24 @@ class EKFSLAM:
         self.cov = np.diag(np.hstack([np.zeros(3), 1000 * np.ones(3 * self.n_landmarks)]))
 
         # process noise (motion_model)
-        self.Q = np.diag([0.005, 0.005, 0.002, 0., 0., 0.])
+        self.Q = np.diag([0.05, 0.05, 0.002, 0., 0., 0.])
 
         # measurement noise (single observation)
-        self.R = np.diag([0.1, 0.1, 0.1])
+        self.R = np.diag([0.05, 0.05, 0.01])
 
     # ---------------------------------------------------------------------
     # ---------------------- prediction step-------------------------------
     # ---------------------------------------------------------------------
 
-    def predict(self, u, dt):
+    def predict(self, v, w, dt):
         # integrate system dynamics for mean vector
-        mu = motion(self.x, u, dt)
+        mu = motion_v(self.x, v, w, dt)
 
         # linearized motion model
-        F = F_jac(self.x, u, dt)
+        F = F_jac_v(mu, v, w, dt)
 
+        if dt >= 1:
+            dt = 0.
         self.cov = np.matmul(F, np.matmul(self.cov, F.T)) + dt * self.Q
         self.x = mu
 
@@ -110,6 +122,9 @@ class EKFSLAM:
             self.x[3] = self.x[0] + cos(self.x[2]) * z[0] - sin(self.x[2]) * z[1]
             self.x[4] = self.x[1] - sin(self.x[2]) * z[0] + cos(self.x[2]) * z[1]
             self.x[5] = self.x[2] + z[2]
+            print("Init landmark: " + str(self.x[3:6]))
+            print("Init meas: " + str(z))
+            print("Init state: " + str(self.x[0:3]))
 
         # predict measurement using observation model
         z_hat = observation_orientation(self.x)
@@ -123,7 +138,6 @@ class EKFSLAM:
         # correct state
         self.x += K.dot(z - z_hat)
         self.cov = np.matmul((np.eye(6) - np.matmul(K, H)), self.cov)
-        print(self.x)
 
     # ---------------------------------------------------------------------
     # ---------------------- Visualizations -------------------------------
