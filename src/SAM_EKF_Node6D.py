@@ -6,10 +6,13 @@ from sensor_msgs.msg import Imu
 import tf2_geometry_msgs
 from visualization_msgs.msg import Marker, MarkerArray
 
-from EKFSLAM import *
+from EKFSLAM6D import *
 import tf2_ros
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
+
+from sam_msgs.msg import ThrusterAngles
+from smarc_msgs.msg import ThrusterRPM
 
 class EKFSLAMNode(object):
     # ---------------------------------------------------------------------
@@ -23,7 +26,7 @@ class EKFSLAMNode(object):
 
         # initial pose of SAM
         # x0 = np.array([0.632, 0.0, -0.07])
-        x0 = np.array([-0.032, -0.083, 0.349])
+        x0 = np.array([-0.032, -0.083, 0.349, 0., 0., 0.])
 
         # initialize EKF SLAM
         self.ekf = EKFSLAM(x0)
@@ -43,16 +46,15 @@ class EKFSLAMNode(object):
 
         # TODO: change timestep accordingly
         self.dt = 0.01
-
-        # imu integrated velocity
-        self.v_integrated = np.zeros(2)
-
-        # last updated velocity and timestep
-        self.pos_last = x0[0:2]
         self.t_last = rospy.get_time()
-        self.theta_last = x0[2]
 
         self.last_meas = [0, 0, 0]
+
+        # rudder direction
+        self.dr = 0.
+
+        # sam rpm
+        self.rpm = 0.
 
         # tfs
         self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(200))
@@ -69,6 +71,8 @@ class EKFSLAMNode(object):
                                                             self.updateEKF)
         self.subscribers["imu"] = rospy.Subscriber("~/imu_data", Imu, self.process_imu)
         self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
+        self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
+        self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
 
     def init_publishers(self):
         """ initialize ROS publishers and stores them in a dictionary"""
@@ -77,6 +81,9 @@ class EKFSLAMNode(object):
         self.publishers["SAM_PoseCov"] = rospy.Publisher("sam/EstimatedPose", PoseWithCovarianceStamped, queue_size=1)
         self.publishers["Station_PoseCov"] = rospy.Publisher("EstimatedStationPose", PoseWithCovarianceStamped, queue_size=1)
         self.publishers["station_pose"] = rospy.Publisher("~covariance", Pose2D, queue_size=1)
+
+    def updateDR(self, msg):
+        self.dr = np.clip(msg.thruster_vertical_radians, - 7 * pi / 180, 7 * pi / 180)
 
     def process_imu(self, msg):
         self.acc = np.array([msg.linear_acceleration.x,
@@ -87,29 +94,13 @@ class EKFSLAMNode(object):
                               msg.angular_velocity.y,
                               msg.angular_velocity.z])
 
-        self.v_integrated += self.acc[0:2] * self.dt
-
-    def predictEKF(self, controls):
-        self.ekf.predict(controls, self.dt)
+    def predictEKF(self, msg):
+        self.rpm = msg.rpm
+        self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)
+        self.t_last = rospy.get_time()
         self.publish_poses()
 
     def updateEKF(self, msg):
-        print("I'm here!")
-        # obtain velocity and angular velocity through numerical differentiation
-        v = (self.ekf.x[0:2] - self.pos_last) / (rospy.get_time() - self.t_last)
-        w = (self.ekf.x[2] - self.theta_last) / (rospy.get_time() - self.t_last)
-
-        # update last values
-        self.pos_last = self.ekf.x[0:2]
-        self.theta_last = self.ekf.x[2]
-
-        # predict EKF
-        self.ekf.predict(v, w, rospy.get_time() - self.t_last)
-
-        self.t_last = rospy.get_time()
-        print("vel: " + str(v))
-        print("w: " + str(w))
-
         # found_tf = False
         # while not found_tf:
         #     try:
@@ -201,22 +192,22 @@ class EKFSLAMNode(object):
         lm3D = PoseWithCovarianceStamped()
         lm3D.header.stamp = rospy.Time.now()
         lm3D.header.frame_id = "world_ned"
-        lm3D.pose.pose.position.x = self.ekf.x[3]
-        lm3D.pose.pose.position.y = self.ekf.x[4]
+        lm3D.pose.pose.position.x = self.ekf.x[6]
+        lm3D.pose.pose.position.y = self.ekf.x[7]
         lm3D.pose.pose.position.z = -1.
 
-        quat = quaternion_from_euler(0., 0., self.ekf.x[5])
+        quat = quaternion_from_euler(0., 0., self.ekf.x[8])
         lm3D.pose.pose.orientation.x = quat[0]
         lm3D.pose.pose.orientation.y = quat[1]
         lm3D.pose.pose.orientation.z = quat[2]
         lm3D.pose.pose.orientation.w = quat[3]
 
-        lm3D.pose.covariance = [self.ekf.cov[3, 3], self.ekf.cov[3, 4], 0., 0., 0., self.ekf.cov[3, 5]] + \
-                                 [self.ekf.cov[4, 3], self.ekf.cov[4, 4], 0., 0., 0., self.ekf.cov[4, 5]] + \
+        lm3D.pose.covariance = [self.ekf.cov[6, 6], self.ekf.cov[6, 7], 0., 0., 0., self.ekf.cov[6, 8]] + \
+                                 [self.ekf.cov[7, 6], self.ekf.cov[7, 7], 0., 0., 0., self.ekf.cov[7, 8]] + \
                                  [0., 0., 0., 0., 0., 0.] + \
                                  [0., 0., 0., 0., 0., 0.] + \
                                  [0., 0., 0., 0., 0., 0.] + \
-                                 [self.ekf.cov[5, 3], self.ekf.cov[5, 4], 0., 0., 0., self.ekf.cov[5, 5]]
+                                 [self.ekf.cov[8, 6], self.ekf.cov[8, 7], 0., 0., 0., self.ekf.cov[8, 8]]
 
         self.publishers["Station_PoseCov"].publish(lm3D)
 
