@@ -103,8 +103,8 @@ class SAM(object):
         J = np.zeros([len(state), len(state)], dtype=np.float)
 
         for i in range(len(state)):
-            x1 = state.copy()
-            x2 = state.copy()
+            x1 = np.asarray(state).copy()
+            x2 = np.asarray(state).copy()
 
             x1[i] += eps
             x2[i] -= eps
