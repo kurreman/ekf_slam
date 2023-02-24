@@ -4,6 +4,7 @@ import rospy
 from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped, PoseWithCovariance
 from sensor_msgs.msg import Imu
 import tf2_geometry_msgs
+from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 
 from EKFSLAM6D import *
@@ -59,6 +60,7 @@ class EKFSLAMNode(object):
         # tfs
         self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(200))
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.broadcaster = tf2_ros.TransformBroadcaster()
 
         self.base_frame = rospy.get_param('/planner_node/base_frame_name','/poiu')
         self.docking_frame = rospy.get_param('/planner_node/docking_frame_name', '/uiop')
@@ -187,7 +189,20 @@ class EKFSLAMNode(object):
                             [0., 0., 0., 0., 0., 0.] + \
                             [self.ekf.cov[2, 0], self.ekf.cov[2, 1], 0., 0., 0., self.ekf.cov[2, 2]]
 
+        # Build transformation message for TF server.
+        w_ned_tfm_sam = TransformStamped()
+        w_ned_tfm_sam.header = pose3D.header
+        w_ned_tfm_sam.child_frame_id = "sam/base_link_ned"
+        w_ned_tfm_sam.transform.translation.x = pose3D.pose.pose.position.x
+        w_ned_tfm_sam.transform.translation.y = pose3D.pose.pose.position.y
+        w_ned_tfm_sam.transform.translation.z = pose3D.pose.pose.position.z
+        w_ned_tfm_sam.transform.rotation.x = pose3D.pose.pose.orientation.x
+        w_ned_tfm_sam.transform.rotation.y = pose3D.pose.pose.orientation.y
+        w_ned_tfm_sam.transform.rotation.z = pose3D.pose.pose.orientation.z
+        w_ned_tfm_sam.transform.rotation.w = pose3D.pose.pose.orientation.w
+
         self.publishers["SAM_PoseCov"].publish(pose3D)
+        self.broadcaster.sendTransform(w_ned_tfm_sam)
 
         lm3D = PoseWithCovarianceStamped()
         lm3D.header.stamp = rospy.Time.now()
@@ -209,7 +224,20 @@ class EKFSLAMNode(object):
                                  [0., 0., 0., 0., 0., 0.] + \
                                  [self.ekf.cov[8, 6], self.ekf.cov[8, 7], 0., 0., 0., self.ekf.cov[8, 8]]
 
+        # Build transformation message for TF server.
+        w_ned_tfm_station = TransformStamped()
+        w_ned_tfm_station.header = lm3D.header
+        w_ned_tfm_station.child_frame_id = "/docking_station_ned"
+        w_ned_tfm_station.transform.translation.x = lm3D.pose.pose.position.x
+        w_ned_tfm_station.transform.translation.y = lm3D.pose.pose.position.y
+        w_ned_tfm_station.transform.translation.z = lm3D.pose.pose.position.z
+        w_ned_tfm_station.transform.rotation.x = lm3D.pose.pose.orientation.x
+        w_ned_tfm_station.transform.rotation.y = lm3D.pose.pose.orientation.y
+        w_ned_tfm_station.transform.rotation.z = lm3D.pose.pose.orientation.z
+        w_ned_tfm_station.transform.rotation.w = lm3D.pose.pose.orientation.w
+
         self.publishers["Station_PoseCov"].publish(lm3D)
+        self.broadcaster.sendTransform(w_ned_tfm_station)
 
         # Visualize measurement with respect to sam frame
         marker = Marker()
