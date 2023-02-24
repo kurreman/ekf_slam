@@ -192,7 +192,7 @@ class EKFSLAMNode(object):
         # Build transformation message for TF server.
         w_ned_tfm_sam = TransformStamped()
         w_ned_tfm_sam.header = pose3D.header
-        w_ned_tfm_sam.child_frame_id = "sam/base_link_ned"
+        w_ned_tfm_sam.child_frame_id = "sam/base_link_ned/estimated"
         w_ned_tfm_sam.transform.translation.x = pose3D.pose.pose.position.x
         w_ned_tfm_sam.transform.translation.y = pose3D.pose.pose.position.y
         w_ned_tfm_sam.transform.translation.z = pose3D.pose.pose.position.z
@@ -227,7 +227,7 @@ class EKFSLAMNode(object):
         # Build transformation message for TF server.
         w_ned_tfm_station = TransformStamped()
         w_ned_tfm_station.header = lm3D.header
-        w_ned_tfm_station.child_frame_id = "/docking_station_ned"
+        w_ned_tfm_station.child_frame_id = "/docking_station_ned/estimated"
         w_ned_tfm_station.transform.translation.x = lm3D.pose.pose.position.x
         w_ned_tfm_station.transform.translation.y = lm3D.pose.pose.position.y
         w_ned_tfm_station.transform.translation.z = lm3D.pose.pose.position.z
