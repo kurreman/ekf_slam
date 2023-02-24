@@ -2,6 +2,8 @@
 
     <node pkg="tf" type="static_transform_publisher" name="sam_base_to_ned"
         args="0 0 0 0 0 0 sam/base_link sam/base_link_ned 10"/>
+    <node pkg="tf" type="static_transform_publisher" name="sam_ned_to_enu_estimated"
+        args="0 0 0 0 1.5707 1.5707 sam/base_link_ned/estimated sam/base_link/esimtated 10"/>
     <node pkg="tf" type="static_transform_publisher" name="docking_link_ned"
         args="0 0 0 0 -1.5707 -1.5707 docking_station_link docking_station_ned 10"/>
 
