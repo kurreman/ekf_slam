@@ -27,7 +27,7 @@ class EKFSLAMNode(object):
 
         # initial pose of SAM
         # x0 = np.array([0.632, 0.0, -0.07])
-        x0 = np.array([-0.032, -0.083, 0.349, 0., 0., 0.])
+        x0 = np.array([0., 0., 0., 0., 0., 0.])
 
         # initialize EKF SLAM
         self.ekf = EKFSLAM(x0)
@@ -171,12 +171,16 @@ class EKFSLAMNode(object):
         # Publish pose with covariance
         pose3D = PoseWithCovarianceStamped()
         pose3D.header.stamp = rospy.Time.now()
-        pose3D.header.frame_id = "world_ned"
-        pose3D.pose.pose.position.x = self.ekf.x[0]
-        pose3D.pose.pose.position.y = self.ekf.x[1]
+        # pose3D.header.frame_id = "world_ned"
+        # pose3D.pose.pose.position.x = self.ekf.x[0]
+        # pose3D.pose.pose.position.y = self.ekf.x[1]
+        pose3D.header.frame_id = "map"
+        pose3D.pose.pose.position.x = self.ekf.x[1]
+        pose3D.pose.pose.position.y = self.ekf.x[0]
         pose3D.pose.pose.position.z = -1.
 
-        quat = quaternion_from_euler(0., 0., self.ekf.x[2])
+        # quat = quaternion_from_euler(0., 0., self.ekf.x[2])
+        quat = quaternion_from_euler(0., 0., np.pi/2 - self.ekf.x[2])
         pose3D.pose.pose.orientation.x = quat[0]
         pose3D.pose.pose.orientation.y = quat[1]
         pose3D.pose.pose.orientation.z = quat[2]
@@ -206,12 +210,16 @@ class EKFSLAMNode(object):
 
         lm3D = PoseWithCovarianceStamped()
         lm3D.header.stamp = rospy.Time.now()
-        lm3D.header.frame_id = "world_ned"
-        lm3D.pose.pose.position.x = self.ekf.x[6]
-        lm3D.pose.pose.position.y = self.ekf.x[7]
+        # lm3D.header.frame_id = "world_ned"
+        # lm3D.pose.pose.position.x = self.ekf.x[6]
+        # lm3D.pose.pose.position.y = self.ekf.x[7]
+        lm3D.header.frame_id = "map"
+        lm3D.pose.pose.position.x = self.ekf.x[7]
+        lm3D.pose.pose.position.y = self.ekf.x[6]
         lm3D.pose.pose.position.z = -1.
 
-        quat = quaternion_from_euler(0., 0., self.ekf.x[8])
+        # quat = quaternion_from_euler(0., 0., self.ekf.x[8])
+        quat = quaternion_from_euler(0., 0., np.pi/2 - self.ekf.x[8])
         lm3D.pose.pose.orientation.x = quat[0]
         lm3D.pose.pose.orientation.y = quat[1]
         lm3D.pose.pose.orientation.z = quat[2]
