@@ -6,7 +6,7 @@ from sensor_msgs.msg import Imu
 import tf2_geometry_msgs
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs import Bool
+from std_msgs.msg import Bool
 
 from EKFSLAM6D import *
 import tf2_ros
@@ -64,10 +64,6 @@ class EKFSLAMNode(object):
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
         self.broadcaster = tf2_ros.TransformBroadcaster()
 
-        self.base_frame = rospy.get_param('/planner_node/base_frame_name','/poiu')
-        self.docking_frame = rospy.get_param('/planner_node/docking_frame_name', '/uiop')
-
-        print("Init cov: " + str(self.ekf.cov.diagonal()))
 
     def init_subscribers(self):
         self.subscribers["RelativePose"] = rospy.Subscriber("/docking_station/feature_model/estimated_pose",
@@ -101,6 +97,7 @@ class EKFSLAMNode(object):
 
     def predictEKF(self, msg):
         self.rpm = msg.rpm
+        # print("controls : " + str([self.rpm, self.dr]))
         self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)
         self.t_last = rospy.get_time()
         self.publish_poses()
@@ -122,28 +119,32 @@ class EKFSLAMNode(object):
         #         found_tf = True
         #     except (tf2_ros.ExtrapolationException):
         #         continue
-        self.right_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_right_link", rospy.Time(0))
-        self.left_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_left_link", rospy.Time(0))
+        # self.right_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_right_link", rospy.Time(0))
+        # self.left_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_left_link", rospy.Time(0))
+        # frame = msg.header.frame_id
+        # trafo = self.left_cam_to_base
         
-        frame = msg.header.frame_id
-        trafo = self.left_cam_to_base
+        # if frame == "sam/camera_front_right_link":
+        #     trafo = self.right_cam_to_base
+        #     rospy.logwarn("Got pose on the right camera!")
+        # print(trafo)
+        # print(msg)
+        base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time(0))
 
-        if frame == "sam/camera_front_right_link":
-            trafo = self.right_cam_to_base
-
-        # base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link", "docking_station_ned", rospy.Time(0))
         # base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
         # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
         # ds_to_ned = self.tf_buffer.lookup_transform("docking_station_link", "docking_station_ned", rospy.Time.now(), rospy.Duration(0.00001))
-        # base_to_ds = PoseWithCovariance()
-        # base_to_ds.pose.position.x = trafo.transform.translation.x
-        # base_to_ds.pose.position.y = base_tfm_ds.transform.translation.y
-        # base_to_ds.pose.position.z = base_tfm_ds.transform.translation.z
-        # base_to_ds.pose.orientation.x = base_tfm_ds.transform.rotation.x
-        # base_to_ds.pose.orientation.y = base_tfm_ds.transform.rotation.y
-        # base_to_ds.pose.orientation.z = base_tfm_ds.transform.rotation.z
-        # base_to_ds.pose.orientation.w = base_tfm_ds.transform.rotation.w
-        meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(msg.pose, trafo)
+        base_to_ds = PoseWithCovariance()
+        base_to_ds.pose.position.x = base_tfm_ds.transform.translation.x
+        base_to_ds.pose.position.y = base_tfm_ds.transform.translation.y
+        base_to_ds.pose.position.z = base_tfm_ds.transform.translation.z
+        base_to_ds.pose.orientation.x = base_tfm_ds.transform.rotation.x
+        base_to_ds.pose.orientation.y = base_tfm_ds.transform.rotation.y
+        base_to_ds.pose.orientation.z = base_tfm_ds.transform.rotation.z
+        base_to_ds.pose.orientation.w = base_tfm_ds.transform.rotation.w
+        meas_sam_transformed = base_to_ds
+        # meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(base_to_ds, base_tfm_ned)
+        # meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(msg.pose, trafo)
         # meas_sam_transformed_ = tf2_geometry_msgs.do_transform_pose(msg.pose, ds_to_ned)
         # meas_sam_transformed = tf2_geometry_msgs.do_transform_pose(meas_sam_transformed_,
                                                                    # meas_sam)
@@ -157,6 +158,7 @@ class EKFSLAMNode(object):
         # qy = meas_sam_transformed.transform.rotation.y
         # qz = meas_sam_transformed.transform.rotation.z
         rpy = euler_from_quaternion([qx, qy, qz, qw])
+        print(rpy[2])
 
         meas = np.array([meas_sam_transformed.pose.position.x,
                          meas_sam_transformed.pose.position.y,
@@ -164,7 +166,7 @@ class EKFSLAMNode(object):
         # meas = np.array([meas_sam_transformed.transform.translation.x,
                          # meas_sam_transformed.transform.translation.y,
                          # rpy[2]])
-        print("Measurement: " + str(meas))
+        # print("Measurement: " + str(meas))
         self.ekf.update(meas)
         self.publish_poses()
         self.last_meas = meas

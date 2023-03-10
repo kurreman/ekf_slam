@@ -46,21 +46,19 @@ class EKFSLAM:
         # initialize state (Assuming 2D pose of robot + only positions of landmarks)
         self.x = np.hstack([x0, np.zeros(3 * self.n_landmarks)])
 
-        self.cov = np.diag(np.hstack([np.zeros(6), 10000 * np.ones(3 * self.n_landmarks)]))
+        self.cov = np.diag(np.hstack([np.zeros(6), 1000 * np.ones(3 * self.n_landmarks)]))
 
         # process noise (motion_model)
         self.Q = 0.5 * np.diag([0.01, 0.01, 0.002, 0.01, 0.01, 0.01, 0., 0., 0.])
 
         # measurement noise (single observation)
-        self.R = np.diag([0.1, 0.1, 0.01])
+        self.R = np.diag([0.1, 0.1, 0.05])
 
     # ---------------------------------------------------------------------
     # ---------------------- prediction step-------------------------------
     # ---------------------------------------------------------------------
 
     def predict(self, u, dt):
-        print("dt: " + str(dt))
-        print("controls: " + str(u))
         # integrate system dynamics for mean vector
         mu = np.hstack([self.sam.motion(self.x.tolist()[0:6], u, dt), self.x[6:9]])
 
@@ -80,7 +78,7 @@ class EKFSLAM:
         if id not in self.landmarks_detected:
             self.landmarks_detected.append(id)
             self.x[6] = self.x[0] + cos(self.x[2]) * z[0] - sin(self.x[2]) * z[1]
-            self.x[7] = self.x[1] - sin(self.x[2]) * z[0] + cos(self.x[2]) * z[1]
+            self.x[7] = self.x[1] + sin(self.x[2]) * z[0] + cos(self.x[2]) * z[1]
             self.x[8] = self.x[2] + z[2]
 
         # predict measurement using observation model
