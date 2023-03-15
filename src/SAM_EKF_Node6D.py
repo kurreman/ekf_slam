@@ -111,24 +111,6 @@ class EKFSLAMNode(object):
 
     def updateEKF(self, msg):
         self.found_lm = True
-        # found_tf = False
-        # while not found_tf:
-        #     try:
-        #         base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link", "docking_station_ned", rospy.Time(0))
-        #         base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
-        #         found_tf = True
-        #     except (tf2_ros.ExtrapolationException):
-        #         continue
-        # self.right_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_right_link", rospy.Time(0))
-        # self.left_cam_to_base = self.tf_buffer.lookup_transform("sam/base_link", "sam/camera_front_left_link", rospy.Time(0))
-        # frame = msg.header.frame_id
-        # trafo = self.left_cam_to_base
-        
-        # if frame == "sam/camera_front_right_link":
-        #     trafo = self.right_cam_to_base
-        #     rospy.logwarn("Got pose on the right camera!")
-        # print(trafo)
-        # print(msg)
         base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time(0))
 
         # base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
@@ -158,7 +140,8 @@ class EKFSLAMNode(object):
         # qy = meas_sam_transformed.transform.rotation.y
         # qz = meas_sam_transformed.transform.rotation.z
         rpy = euler_from_quaternion([qx, qy, qz, qw])
-        print(rpy[2])
+        print("These are the angles:")
+        print(rpy)
 
         meas = np.array([meas_sam_transformed.pose.position.x,
                          meas_sam_transformed.pose.position.y,
@@ -206,12 +189,12 @@ class EKFSLAMNode(object):
         pose3D.pose.pose.orientation.z = quat[2]
         pose3D.pose.pose.orientation.w = quat[3]
 
-        pose3D.pose.covariance = [self.ekf.cov[0, 0], self.ekf.cov[0, 1], 0., 0., 0., self.ekf.cov[0, 2]] +\
-                            [self.ekf.cov[1, 0], self.ekf.cov[1, 1], 0., 0., 0., self.ekf.cov[1, 2]] + \
+        pose3D.pose.covariance = [self.ekf.cov[1, 1], self.ekf.cov[0, 1], 0., 0., 0., self.ekf.cov[1, 2]] +\
+                            [self.ekf.cov[1, 0], self.ekf.cov[0, 0], 0., 0., 0., self.ekf.cov[0, 2]] + \
                             [0., 0., 0., 0., 0., 0.] +\
                             [0., 0., 0., 0., 0., 0.] + \
                             [0., 0., 0., 0., 0., 0.] + \
-                            [self.ekf.cov[2, 0], self.ekf.cov[2, 1], 0., 0., 0., self.ekf.cov[2, 2]]
+                            [self.ekf.cov[2, 1], self.ekf.cov[2, 0], 0., 0., 0., self.ekf.cov[2, 2]]
 
         # Build transformation message for TF server.
         w_ned_tfm_sam = TransformStamped()
@@ -245,12 +228,12 @@ class EKFSLAMNode(object):
         lm3D.pose.pose.orientation.z = quat[2]
         lm3D.pose.pose.orientation.w = quat[3]
 
-        lm3D.pose.covariance = [self.ekf.cov[6, 6], self.ekf.cov[6, 7], 0., 0., 0., self.ekf.cov[6, 8]] + \
-                                 [self.ekf.cov[7, 6], self.ekf.cov[7, 7], 0., 0., 0., self.ekf.cov[7, 8]] + \
+        lm3D.pose.covariance = [self.ekf.cov[7, 7], self.ekf.cov[6, 7], 0., 0., 0., self.ekf.cov[7, 8]] + \
+                                 [self.ekf.cov[7, 6], self.ekf.cov[6, 6], 0., 0., 0., self.ekf.cov[6, 8]] + \
                                  [0., 0., 0., 0., 0., 0.] + \
                                  [0., 0., 0., 0., 0., 0.] + \
                                  [0., 0., 0., 0., 0., 0.] + \
-                                 [self.ekf.cov[8, 6], self.ekf.cov[8, 7], 0., 0., 0., self.ekf.cov[8, 8]]
+                                 [self.ekf.cov[8, 7], self.ekf.cov[8, 6], 0., 0., 0., self.ekf.cov[8, 8]]
 
         # Build transformation message for TF server.
         w_ned_tfm_station = TransformStamped()
@@ -266,36 +249,6 @@ class EKFSLAMNode(object):
 
         self.publishers["Station_PoseCov"].publish(lm3D)
         self.broadcaster.sendTransform(w_ned_tfm_station)
-
-        # Visualize measurement with respect to sam frame
-        marker = Marker()
-
-        marker.header.frame_id = "/map"
-        marker.header.stamp = rospy.Time.now()
-
-        # set shape, Arrow: 0; Cube: 1 ; Sphere: 2 ; Cylinder: 3
-        marker.type = 2
-        marker.id = 0
-
-        # Set the scale of the marker
-        marker.scale.x = 1.0
-        marker.scale.y = 1.0
-        marker.scale.z = 1.0
-
-        # Set the color
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
-
-        # Set the pose of the marker
-        marker.pose.position.x = 0
-        marker.pose.position.y = 0
-        marker.pose.position.z = 0
-        marker.pose.orientation.x = 0.0
-        marker.pose.orientation.y = 0.0
-        marker.pose.orientation.z = 0.0
-        marker.pose.orientation.w = 1.0
 
 
 def main():
