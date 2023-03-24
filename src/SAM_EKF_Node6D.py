@@ -140,8 +140,8 @@ class EKFSLAMNode(object):
         # qy = meas_sam_transformed.transform.rotation.y
         # qz = meas_sam_transformed.transform.rotation.z
         rpy = euler_from_quaternion([qx, qy, qz, qw])
-        print("These are the angles:")
-        print(rpy)
+        # print("These are the angles:")
+        # print(rpy)
 
         meas = np.array([meas_sam_transformed.pose.position.x,
                          meas_sam_transformed.pose.position.y,
@@ -253,9 +253,12 @@ class EKFSLAMNode(object):
 
 def main():
     """Starts the EKF SLAM Node"""
+    rate = rospy.Rate(20)
     rospy.init_node("EKF_Node")
     EKFSLAMNode()
+    rate.sleep()
     rospy.spin()
+    
 
 
 if __name__ == "__main__":
