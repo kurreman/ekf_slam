@@ -111,7 +111,8 @@ class EKFSLAMNode(object):
 
     def updateEKF(self, msg):
         self.found_lm = True
-        base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time(0))
+        # base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time(0))
+        base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time())
 
         # base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
         # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
@@ -253,14 +254,14 @@ class EKFSLAMNode(object):
 
 def main():
     """Starts the EKF SLAM Node"""
-    rate = rospy.Rate(20)
     rospy.init_node("EKF_Node")
-    EKFSLAMNode()
-    rate.sleep()
-    rospy.spin()
+    node = EKFSLAMNode()
+    #rospy.spin()
+
+    rate = rospy.Rate(20)
+    while not rospy.is_shutdown():       
+        rate.sleep()
     
-
-
 if __name__ == "__main__":
     main()
 
