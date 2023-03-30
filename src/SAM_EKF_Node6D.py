@@ -255,7 +255,8 @@ class EKFSLAMNode(object):
 def main():
     """Starts the EKF SLAM Node"""
     rospy.init_node("EKF_Node")
-    node = EKFSLAMNode()
+    EKFSLAMNode()
+    # node = EKFSLAMNode()
     #rospy.spin()
 
     rate = rospy.Rate(20)
