@@ -18,9 +18,14 @@ class SAM(object):
         self.dr_constant = 0.0
 
         # Hydrodynamic coefficients
-        self.Xuu = 3  # 0.8 #1.
-        self.Yvv = 20.0  # 100.
-        self.Nrr = 20.0  # 100.
+        # self.Xuu = 3  # 0.8 #1.
+        # self.Yvv = 20.0  # 100.
+        # self.Nrr = 20.0  # 100.
+
+        ## TANK PARAMETERS
+        self.Xuu = 10  # 0.8 #1.
+        self.Yvv = 18.0  # 100.
+        self.Nrr = 18.0  # 100.
 
     def eom(self, state, control):
         # extract states and controls
@@ -29,8 +34,13 @@ class SAM(object):
         rpm, dr = control
 
         # scale controls from -1 to 1 to the correct ranges
+        # rpm_scale = 1 #0.15
+        # d_scale = -1.
+
+        ## TANK PARAMETERS
+        # Potentially we need to adjust these. They differ from Joris model
         rpm_scale = 1 #0.15
-        d_scale = -1.
+        d_scale = -2.5
 
         rpm = rpm * rpm_scale
         dr = dr * d_scale
@@ -47,7 +57,8 @@ class SAM(object):
         y_cp = 0.
 
         # Control actuators
-        KT = 0.0175
+        ## TANK PARAMETER
+        KT = 0.00175
 
         # Mass and inertia matrix
         M = np.array([[self.m, 0., -self.m * y_g],
