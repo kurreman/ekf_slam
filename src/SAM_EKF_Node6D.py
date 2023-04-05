@@ -9,9 +9,10 @@ from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool
 
 from EKFSLAM6D import *
-import tf2_ros
+import tf2_ros, tf
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
+from sbg_driver.msg import SbgEkfEuler
 
 from sam_msgs.msg import ThrusterAngles
 from smarc_msgs.msg import ThrusterRPM
@@ -26,19 +27,17 @@ class EKFSLAMNode(object):
         # 2 --> rpm model, 3 --> IMU model
         self.motionmodel = 1
 
+        # tfs
+        self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(200))
+        self.listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.broadcaster = tf2_ros.TransformBroadcaster()
+
         # initial pose of SAM
         # x0 = np.array([0.632, 0.0, -0.07])
         x0 = np.array([0., 0., 0., 0., 0., 0.])
 
         # initialize EKF SLAM
         self.ekf = EKFSLAM(x0)
-
-        # initialize publishers & subscribers
-        self.subscribers = {}
-        self.init_subscribers()
-
-        self.publishers = {}
-        self.init_publishers()
 
         # 3D acceleration of SAM
         self.acc = []
@@ -59,10 +58,17 @@ class EKFSLAMNode(object):
         self.rpm = 0.
 
         self.found_lm = False
-        # tfs
-        self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(200))
-        self.listener = tf2_ros.TransformListener(self.tf_buffer)
-        self.broadcaster = tf2_ros.TransformBroadcaster()
+
+        self.last_distances = []
+
+        self.time_last_meas = rospy.get_time()
+
+        # initialize publishers & subscribers
+        self.subscribers = {}
+        self.init_subscribers()
+
+        self.publishers = {}
+        self.init_publishers()
 
 
     def init_subscribers(self):
@@ -73,6 +79,7 @@ class EKFSLAMNode(object):
         self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
         self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
         self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
+        self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_euler", SbgEkfEuler, self.pitchCallback)
 
     def init_publishers(self):
         """ initialize ROS publishers and stores them in a dictionary"""
@@ -84,7 +91,12 @@ class EKFSLAMNode(object):
         self.publishers["found_station"] = rospy.Publisher("found_station", Bool, queue_size=1)
 
     def updateDR(self, msg):
-        self.dr = np.clip(msg.thruster_vertical_radians, - 7 * pi / 180, 7 * pi / 180)
+        self.dr = np.clip(msg.thruster_horizontal_radians, - 7 * pi / 180, 7 * pi / 180)
+
+    def pitchCallback(self, pitch):
+        # [self.current_x,self.velocities] = self.getStateFeedback(odom_fb)
+        self.quat = quaternion_from_euler(pitch.angle.x, pitch.angle.y, np.pi/2 - self.ekf.x[2])
+        # print(pitch)
 
     def process_imu(self, msg):
         self.acc = np.array([msg.linear_acceleration.x,
@@ -110,10 +122,16 @@ class EKFSLAMNode(object):
 
 
     def updateEKF(self, msg):
+        if (rospy.get_time() - self.time_last_meas) > 5.:
+            self.last_distances = []
+
+        self.time_last_meas = rospy.get_time()
         self.found_lm = True
         # base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time(0))
-        base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time())
-
+        try:
+            base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time())
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            return
         # base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
         # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
         # ds_to_ned = self.tf_buffer.lookup_transform("docking_station_link", "docking_station_ned", rospy.Time.now(), rospy.Duration(0.00001))
@@ -150,8 +168,26 @@ class EKFSLAMNode(object):
         # meas = np.array([meas_sam_transformed.transform.translation.x,
                          # meas_sam_transformed.transform.translation.y,
                          # rpy[2]])
-        # print("Measurement: " + str(meas))
-        self.ekf.update(meas)
+        print("Measurement: " + str(meas))
+
+        current_dist = np.sqrt(meas[0]**2 + meas[1]**2)
+        if self.last_distances:
+            mean_dist = np.mean(np.array(self.last_distances))
+
+            if abs(current_dist - mean_dist) < 1.:
+                self.ekf.update(meas)
+        
+                if len(self.last_distances) <= 3:
+                    self.last_distances.append(current_dist)
+                else:
+                    self.last_distances.pop(0)
+                    self.last_distances.append(current_dist)
+            else:
+                print("### OUTLIER DETECTED ###")
+        else:
+            self.last_distances.append(current_dist)
+            self.ekf.update(meas)
+
         self.publish_poses()
         self.last_meas = meas
 
@@ -250,6 +286,17 @@ class EKFSLAMNode(object):
 
         self.publishers["Station_PoseCov"].publish(lm3D)
         self.broadcaster.sendTransform(w_ned_tfm_station)
+
+        # odom_to_baselink = TransformStamped()
+        # odom_to_baselink.header = "odom"
+        # odom_to_baselink.child_frame_id = "sam/base_link"
+        # odom_to_baselink.transform.translation.x = self.ekf.x[0]
+        # odom_to_baselink.transform.translation.y = self.ekf.x[1]
+        # odom_to_baselink.transform.translation.z = 0
+        # odom_to_baselink.transform.rotation.x = self.quat[0]
+        # odom_to_baselink.transform.rotation.y = self.quat[1]
+        # odom_to_baselink.transform.rotation.z = self.quat[2]
+        # odom_to_baselink.transform.rotation.w = self.quat[3]
 
 
 def main():

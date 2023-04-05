@@ -1,4 +1,6 @@
 <launch>
+    <node pkg="tf" type="static_transform_publisher" name="base_link_to_map"
+        args="0 0 0 0 0 0 map odom 10"/>
 
     <node pkg="tf" type="static_transform_publisher" name="sam_base_to_ned"
         args="0 0 0 0 0 0 sam/base_link sam/base_link_ned 10"/>

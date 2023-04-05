@@ -29,7 +29,7 @@ class SAM(object):
         rpm, dr = control
 
         # scale controls from -1 to 1 to the correct ranges
-        rpm_scale = 0.15
+        rpm_scale = 1 #0.15
         d_scale = -1.
 
         rpm = rpm * rpm_scale
