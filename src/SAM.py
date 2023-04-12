@@ -40,7 +40,10 @@ class SAM(object):
         ## TANK PARAMETERS
         # Potentially we need to adjust these. They differ from Joris model
         rpm_scale = 1 #0.15
-        d_scale = -2.5
+        # d_scale = -2.5
+
+        # let's change it again, seems different in real life now :)
+        d_scale = -5.0
 
         rpm = rpm * rpm_scale
         dr = dr * d_scale
@@ -58,7 +61,10 @@ class SAM(object):
 
         # Control actuators
         ## TANK PARAMETER
-        KT = 0.00175
+        # KT = 0.00175
+
+        # but let's redo it again :)
+        KT = 0.07
 
         # Mass and inertia matrix
         M = np.array([[self.m, 0., -self.m * y_g],

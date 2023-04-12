@@ -49,7 +49,7 @@ class EKFSLAM:
         self.cov = np.diag(np.hstack([np.zeros(6), 1000 * np.ones(3 * self.n_landmarks)]))
 
         # process noise (motion_model)
-        self.Q = 0.5 * np.diag([0.01, 0.01, 0.002, 0.01, 0.01, 0.01, 0., 0., 0.])
+        self.Q = 0.1* 0.5 * np.diag([0.01, 0.01, 0.002, 0.01, 0.01, 0.01, 0., 0., 0.])
 
         # measurement noise (single observation)
         self.R = np.diag([0.1, 0.1, 0.05])

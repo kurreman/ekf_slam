@@ -76,7 +76,7 @@ class EKFSLAMNode(object):
                                                             PoseWithCovarianceStamped,
                                                             self.updateEKF)
         self.subscribers["imu"] = rospy.Subscriber("~/imu_data", Imu, self.process_imu)
-        self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
+        # self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
         self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
         self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
         self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_euler", SbgEkfEuler, self.pitchCallback)
@@ -109,7 +109,8 @@ class EKFSLAMNode(object):
 
     def predictEKF(self, msg):
         self.rpm = msg.rpm
-        # print("controls : " + str([self.rpm, self.dr]))
+        # TODO: this somehow get's the rpm way too late, so the EKF does not update with the motion model in the beginning
+        print("Matti gets controls : " + str([self.rpm, self.dr]))
         self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)
         self.t_last = rospy.get_time()
         self.publish_poses()
