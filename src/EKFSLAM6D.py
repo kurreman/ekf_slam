@@ -80,9 +80,11 @@ class EKFSLAM:
             self.x[6] = self.x[0] + cos(self.x[2]) * z[0] - sin(self.x[2]) * z[1]
             self.x[7] = self.x[1] + sin(self.x[2]) * z[0] + cos(self.x[2]) * z[1]
             self.x[8] = self.x[2] + z[2]
-            self.cov[6, 6] = 0.1
-            self.cov[7, 7] = 0.1
-            self.cov[8, 8] = 0.05
+            self.cov[6, 6] = 0.01
+            self.cov[7, 7] = 0.01
+            self.cov[8, 8] = 0.005
+            print("Initial Measurement:", z)
+            print("Initial State after first measurmenet:", self.x)
 
         # predict measurement using observation model
         z_hat = observation_orientation(self.x)

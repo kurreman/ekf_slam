@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped, PoseWithCovariance
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, FluidPressure
 import tf2_geometry_msgs
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
@@ -54,6 +54,10 @@ class EKFSLAMNode(object):
         # rudder direction
         self.dr = 0.
 
+        # depth estimate
+        self.current_depth = 0.
+        self.current_pitch = 0.
+
         # sam rpm
         self.rpm = 0.
 
@@ -80,6 +84,7 @@ class EKFSLAMNode(object):
         self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
         self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
         self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_euler", SbgEkfEuler, self.pitchCallback)
+        self.subscribers["depth"] = rospy.Subscriber("/sam/core/depth20_pressure", FluidPressure, self.depthCB)
 
     def init_publishers(self):
         """ initialize ROS publishers and stores them in a dictionary"""
@@ -90,12 +95,26 @@ class EKFSLAMNode(object):
         self.publishers["station_pose"] = rospy.Publisher("~covariance", Pose2D, queue_size=1)
         self.publishers["found_station"] = rospy.Publisher("found_station", Bool, queue_size=1)
 
+
+    def pascal_pressure_to_depth(self, pressure):
+		return 10.*((pressure / 100000.) - 1.) # 117000 -> 1.7
+
+    def depthCB(self, press_msg):
+        # # depth_abs is positive, must be manually negated
+        depth_abs = self.pascal_pressure_to_depth(press_msg.fluid_pressure)
+        # rospy.loginfo("Depth abs %s", depth_abs)
+        # rospy.loginfo("Fluid press %s", press_msg.fluid_pressure)
+
+        if press_msg.fluid_pressure > 90000. and press_msg.fluid_pressure < 500000.:
+            self.current_depth = depth_abs
+    
     def updateDR(self, msg):
         self.dr = np.clip(msg.thruster_horizontal_radians, - 7 * pi / 180, 7 * pi / 180)
 
     def pitchCallback(self, pitch):
         # [self.current_x,self.velocities] = self.getStateFeedback(odom_fb)
         self.quat = quaternion_from_euler(pitch.angle.x, pitch.angle.y, np.pi/2 - self.ekf.x[2])
+        self.current_pitch = - pitch.angle.y
         # print(pitch)
 
     def process_imu(self, msg):
@@ -110,7 +129,7 @@ class EKFSLAMNode(object):
     def predictEKF(self, msg):
         self.rpm = msg.rpm
         # TODO: this somehow get's the rpm way too late, so the EKF does not update with the motion model in the beginning
-        print("Matti gets controls : " + str([self.rpm, self.dr]))
+        # print("Matti gets controls : " + str([self.rpm, self.dr]))
         self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)
         self.t_last = rospy.get_time()
         self.publish_poses()
@@ -123,6 +142,7 @@ class EKFSLAMNode(object):
 
 
     def updateEKF(self, msg):
+        tic = rospy.Time.now()
         if (rospy.get_time() - self.time_last_meas) > 5.:
             self.last_distances = []
 
@@ -169,28 +189,30 @@ class EKFSLAMNode(object):
         # meas = np.array([meas_sam_transformed.transform.translation.x,
                          # meas_sam_transformed.transform.translation.y,
                          # rpy[2]])
-        print("Measurement: " + str(meas))
+        # print("Measurement: " + str(meas))
 
-        current_dist = np.sqrt(meas[0]**2 + meas[1]**2)
-        if self.last_distances:
-            mean_dist = np.mean(np.array(self.last_distances))
+        #current_dist = np.sqrt(meas[0]**2 + meas[1]**2)
+        #if self.last_distances:
+        #    mean_dist = np.mean(np.array(self.last_distances))
 
-            if abs(current_dist - mean_dist) < 1.:
-                self.ekf.update(meas)
+         #   if abs(current_dist - mean_dist) < 1.:
+          #      self.ekf.update(meas)
         
-                if len(self.last_distances) <= 3:
-                    self.last_distances.append(current_dist)
-                else:
-                    self.last_distances.pop(0)
-                    self.last_distances.append(current_dist)
-            else:
-                print("### OUTLIER DETECTED ###")
-        else:
-            self.last_distances.append(current_dist)
-            self.ekf.update(meas)
+           #     if len(self.last_distances) <= 3:
+            #        self.last_distances.append(current_dist)
+             #   else:
+              #      self.last_distances.pop(0)
+               #     self.last_distances.append(current_dist)
+          #  else:
+          #      print("### OUTLIER DETECTED ###")
+       # else:
+        #    self.last_distances.append(current_dist)
+        self.ekf.update(meas)
 
         self.publish_poses()
         self.last_meas = meas
+        toc = rospy.Time.now()
+        print("UPDATEEKF run time: ", (toc - tic).to_sec())
 
     def publish_poses(self):
         SAM_pose = Pose2D()
@@ -201,9 +223,9 @@ class EKFSLAMNode(object):
         self.publishers["robot_pose"].publish(SAM_pose)
 
         landmark_pose = Pose2D()
-        landmark_pose.x = self.ekf.x[3]
-        landmark_pose.y = self.ekf.x[4]
-        landmark_pose.theta = 0.0
+        landmark_pose.x = self.ekf.x[6]
+        landmark_pose.y = self.ekf.x[7]
+        landmark_pose.theta = self.ekf.x[8]
 
         self.publishers["station_pose"].publish(landmark_pose)
 
@@ -218,10 +240,10 @@ class EKFSLAMNode(object):
         pose3D.header.frame_id = "map"
         pose3D.pose.pose.position.x = self.ekf.x[1]
         pose3D.pose.pose.position.y = self.ekf.x[0]
-        pose3D.pose.pose.position.z = -1.
+        pose3D.pose.pose.position.z = self.current_depth
 
         # quat = quaternion_from_euler(0., 0., self.ekf.x[2])
-        quat = quaternion_from_euler(0., 0., np.pi/2 - self.ekf.x[2])
+        quat = quaternion_from_euler(0., self.current_pitch, np.pi/2 - self.ekf.x[2])
         pose3D.pose.pose.orientation.x = quat[0]
         pose3D.pose.pose.orientation.y = quat[1]
         pose3D.pose.pose.orientation.z = quat[2]
@@ -257,7 +279,7 @@ class EKFSLAMNode(object):
         lm3D.header.frame_id = "map"
         lm3D.pose.pose.position.x = self.ekf.x[7]
         lm3D.pose.pose.position.y = self.ekf.x[6]
-        lm3D.pose.pose.position.z = -1.
+        lm3D.pose.pose.position.z = self.current_depth
 
         # quat = quaternion_from_euler(0., 0., self.ekf.x[8])
         quat = quaternion_from_euler(0., 0., np.pi/2 - self.ekf.x[8])
