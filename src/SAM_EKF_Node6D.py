@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import rospy
 from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped, PoseWithCovariance
@@ -7,6 +7,8 @@ import tf2_geometry_msgs
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool
+
+import numpy as np
 
 from EKFSLAM6D import *
 import tf2_ros, tf

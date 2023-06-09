@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+
 from math import *
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from SAM import *
 
+import numpy as np
 
 def observation_orientation(x):
     # include orientation of landmark
