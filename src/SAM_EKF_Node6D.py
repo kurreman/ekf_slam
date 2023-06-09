@@ -97,7 +97,7 @@ class EKFSLAMNode(object):
 
 
     def pascal_pressure_to_depth(self, pressure):
-		return 10.*((pressure / 100000.) - 1.) # 117000 -> 1.7
+        return 10.*((pressure / 100000.) - 1.) # 117000 -> 1.7
 
     def depthCB(self, press_msg):
         # # depth_abs is positive, must be manually negated
