@@ -157,10 +157,18 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
-catkin_install_python(PROGRAMS
-  src/EKFSLAM6D.py src/SAM.py src/SAM_EKF_Node6D.py 
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+# install(PROGRAMS
+#   src/EKFSLAM6D.py
+#   src/SAM.py
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
+
+# catkin_install_python(PROGRAMS
+#   src/SAM_EKF_Node6D.py
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
+
+#src/EKFSLAM6D.py src/SAM.py src/SAM_EKF_Node6D.py 
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
@@ -186,7 +194,7 @@ catkin_install_python(PROGRAMS
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
 #   # myfile1
-#   # myfile2
+#   # myfile
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
 install(DIRECTORY launch/

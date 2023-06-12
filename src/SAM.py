@@ -117,7 +117,7 @@ class SAM(object):
     def jacF(self, state, control, dt):
 
         eps = 1e-5
-        J = np.zeros([len(state), len(state)], dtype=np.float)
+        J = np.zeros([len(state), len(state)], dtype=np.float64)
 
         for i in range(len(state)):
             x1 = np.asarray(state).copy()

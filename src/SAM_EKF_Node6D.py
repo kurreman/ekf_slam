@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 import rospy
 from geometry_msgs.msg import Pose2D, Pose, PoseWithCovarianceStamped, PoseWithCovariance
@@ -8,7 +8,10 @@ from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool
 
+import numpy as np
+
 from EKFSLAM6D import *
+# from EKFSLAM6D import EKFSLAM
 import tf2_ros, tf
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
@@ -127,7 +130,7 @@ class EKFSLAMNode(object):
                               msg.angular_velocity.z])
 
     def predictEKF(self, msg):
-        self.rpm = msg.rpm
+        self.rpm = float(msg.rpm)
         # TODO: this somehow get's the rpm way too late, so the EKF does not update with the motion model in the beginning
         # print("Matti gets controls : " + str([self.rpm, self.dr]))
         self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)

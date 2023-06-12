@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from math import *
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
