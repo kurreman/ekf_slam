@@ -11,7 +11,6 @@ from std_msgs.msg import Bool
 import numpy as np
 
 from EKFSLAM6D import *
-# from EKFSLAM6D import EKFSLAM
 import tf2_ros, tf
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
@@ -146,6 +145,7 @@ class EKFSLAMNode(object):
 
     def updateEKF(self, msg):
         tic = rospy.Time.now()
+        # Hacky outlier rejection
         if (rospy.get_time() - self.time_last_meas) > 5.:
             self.last_distances = []
 
@@ -155,10 +155,13 @@ class EKFSLAMNode(object):
         try:
             base_tfm_ds = self.tf_buffer.lookup_transform("sam/base_link_ned/perception", "docking_station_ned", rospy.Time())
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logwarn("[EKF]: Transform sam/base_link_ned/perception to docking_station_ned not available yet")
             return
+        
         # base_tfm_ned = self.tf_buffer.lookup_transform("sam/base_link_ned", "sam/base_link", rospy.Time(0))
         # meas_sam = self.tf_buffer.lookup_transform("sam/base_link", msg.header.frame_id, msg.header.stamp, rospy.Duration(0.00001))
         # ds_to_ned = self.tf_buffer.lookup_transform("docking_station_link", "docking_station_ned", rospy.Time.now(), rospy.Duration(0.00001))
+
         base_to_ds = PoseWithCovariance()
         base_to_ds.pose.position.x = base_tfm_ds.transform.translation.x
         base_to_ds.pose.position.y = base_tfm_ds.transform.translation.y
