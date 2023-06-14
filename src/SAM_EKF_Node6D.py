@@ -14,7 +14,7 @@ from EKFSLAM6D import *
 import tf2_ros, tf
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
-from sbg_driver.msg import SbgEkfEuler
+from sbg_driver.msg import SbgEkfEuler, SbgEkfQuat
 
 from sam_msgs.msg import ThrusterAngles
 from smarc_msgs.msg import ThrusterRPM
@@ -85,7 +85,7 @@ class EKFSLAMNode(object):
         # self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
         self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
         self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
-        self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_euler", SbgEkfEuler, self.pitchCallback)
+        self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_quat", SbgEkfQuat, self.pitchCallback)
         self.subscribers["depth"] = rospy.Subscriber("/sam/core/depth20_pressure", FluidPressure, self.depthCB)
 
     def init_publishers(self):
@@ -113,10 +113,12 @@ class EKFSLAMNode(object):
     def updateDR(self, msg):
         self.dr = np.clip(msg.thruster_horizontal_radians, - 7 * pi / 180, 7 * pi / 180)
 
-    def pitchCallback(self, pitch):
+    def pitchCallback(self, quatMsg):
         # [self.current_x,self.velocities] = self.getStateFeedback(odom_fb)
-        self.quat = quaternion_from_euler(pitch.angle.x, pitch.angle.y, np.pi/2 - self.ekf.x[2])
-        self.current_pitch = - pitch.angle.y
+        # self.quat = quatMsg.quaternion 
+        # rpy = euler_from_quaternion(pitch.angle.x, pitch.angle.y, np.pi/2 - self.ekf.x[2])
+        rpy = euler_from_quaternion(quatMsg.quaternion)
+        self.current_pitch = -rpy[1]
         # print(pitch)
 
     def process_imu(self, msg):
