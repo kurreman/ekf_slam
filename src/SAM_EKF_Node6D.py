@@ -8,16 +8,18 @@ from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool
 
+
 import numpy as np
 
 from EKFSLAM6D import *
+#from EKFSLAM6D import EKFSLAM
 import tf2_ros, tf
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_from_matrix
 from tf.transformations import translation_matrix, quaternion_matrix
 from sbg_driver.msg import SbgEkfEuler, SbgEkfQuat
 
-from sam_msgs.msg import ThrusterAngles
-from smarc_msgs.msg import ThrusterRPM
+from sam_msgs.msg import ThrusterAngles, PercentStamped
+from smarc_msgs.msg import ThrusterRPM, ThrusterFeedback
 
 class EKFSLAMNode(object):
     # ---------------------------------------------------------------------
@@ -80,13 +82,14 @@ class EKFSLAMNode(object):
     def init_subscribers(self):
         self.subscribers["RelativePose"] = rospy.Subscriber("/docking_station/feature_model/estimated_pose",
                                                             PoseWithCovarianceStamped,
-                                                            self.updateEKF)
-        self.subscribers["imu"] = rospy.Subscriber("~/imu_data", Imu, self.process_imu)
+                                                            self.updateEKF, queue_size=1)
+        self.subscribers["imu"] = rospy.Subscriber("~/imu_data", Imu, self.process_imu, queue_size=1)
         # self.subscribers["control"] = rospy.Subscriber("~/odometry_data", Pose, self.predictEKF)
-        self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_cmd", ThrusterRPM, self.predictEKF)
-        self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR)
-        self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_quat", SbgEkfQuat, self.pitchCallback)
-        self.subscribers["depth"] = rospy.Subscriber("/sam/core/depth20_pressure", FluidPressure, self.depthCB)
+        self.subscribers["rpm"] = rospy.Subscriber("/sam/core/thruster1_fb", ThrusterFeedback, self.predictEKF, queue_size=1)
+        self.subscribers["vbs"] = rospy.Subscriber("/sam/core/vbs_cmd", PercentStamped, self.publishPoseCallBackVBS, queue_size=1)
+        self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR, queue_size=1)
+        self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_quat", SbgEkfQuat, self.pitchCallback, queue_size=1)
+        self.subscribers["depth"] = rospy.Subscriber("/sam/core/depth20_pressure", FluidPressure, self.depthCB, queue_size=1)
 
     def init_publishers(self):
         """ initialize ROS publishers and stores them in a dictionary"""
@@ -117,7 +120,8 @@ class EKFSLAMNode(object):
         # [self.current_x,self.velocities] = self.getStateFeedback(odom_fb)
         # self.quat = quatMsg.quaternion 
         # rpy = euler_from_quaternion(pitch.angle.x, pitch.angle.y, np.pi/2 - self.ekf.x[2])
-        rpy = euler_from_quaternion(quatMsg.quaternion)
+        quat = [quatMsg.quaternion.x, quatMsg.quaternion.y, quatMsg.quaternion.z, quatMsg.quaternion.w]
+        rpy = euler_from_quaternion(quat)
         self.current_pitch = -rpy[1]
         # print(pitch)
 
@@ -131,7 +135,7 @@ class EKFSLAMNode(object):
                               msg.angular_velocity.z])
 
     def predictEKF(self, msg):
-        self.rpm = float(msg.rpm)
+        self.rpm = float(msg.rpm.rpm)
         # TODO: this somehow get's the rpm way too late, so the EKF does not update with the motion model in the beginning
         # print("Matti gets controls : " + str([self.rpm, self.dr]))
         self.ekf.predict([self.rpm, self.dr], rospy.get_time() - self.t_last)
@@ -142,8 +146,17 @@ class EKFSLAMNode(object):
             m.data = True
         else:
             m.data = False
-        self.publishers["found_station"].publish(m)
+        
+        try:
+            self.publishers["found_station"].publish(m)
+        except:
+            print("[EKF] haven't seen station yet")
+            pass
 
+    def publishPoseCallBackVBS(self, msg):
+        
+        self.publish_poses()
+        
 
     def updateEKF(self, msg):
         tic = rospy.Time.now()
@@ -228,14 +241,18 @@ class EKFSLAMNode(object):
         SAM_pose.y = self.ekf.x[1]
         SAM_pose.theta = self.ekf.x[2]
 
-        self.publishers["robot_pose"].publish(SAM_pose)
+        # self.publishers["robot_pose"].publish(SAM_pose)
 
         landmark_pose = Pose2D()
         landmark_pose.x = self.ekf.x[6]
         landmark_pose.y = self.ekf.x[7]
         landmark_pose.theta = self.ekf.x[8]
 
-        self.publishers["station_pose"].publish(landmark_pose)
+        try:
+            self.publishers["station_pose"].publish(landmark_pose)
+        except:
+            print("[EKF] haven't seen station yet")
+            pass
 
 
         # FOR DEBUGGING
