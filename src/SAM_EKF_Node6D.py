@@ -218,7 +218,7 @@ class EKFSLAMNode(object):
         self.publish_poses()
         self.last_meas = meas
         toc = rospy.Time.now()
-        print("UPDATEEKF run time: ", (toc - tic).to_sec())
+        # print("UPDATEEKF run time: ", (toc - tic).to_sec())
 
     def publish_poses(self):
         SAM_pose = Pose2D()
