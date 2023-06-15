@@ -100,7 +100,7 @@ class EKFSLAMNode(object):
         self.publishers["Station_PoseCov"] = rospy.Publisher("EstimatedStationPose", PoseWithCovarianceStamped, queue_size=1)
         self.publishers["station_pose"] = rospy.Publisher("~covariance", Pose2D, queue_size=1)
         self.publishers["found_station"] = rospy.Publisher("found_station", Bool, queue_size=1)
-        self.publishers["ekf_depth"] = rospy.Publisher("/ekf/depth", Float64, queue_size=1)
+        self.publishers["ekf_depth"] = rospy.Publisher("/sam/ekf/depth", Float64, queue_size=1)
 
 
 
@@ -299,6 +299,10 @@ class EKFSLAMNode(object):
         self.publishers["SAM_PoseCov"].publish(pose3D)
         self.broadcaster.sendTransform(w_ned_tfm_sam)
 
+        ekf_depth = Float64()
+        ekf_depth.data = pose3D.pose.pose.position.z
+        self.publishers["ekf_depth"].publish(ekf_depth)
+
         lm3D = PoseWithCovarianceStamped()
         lm3D.header.stamp = rospy.Time.now()
         # lm3D.header.frame_id = "world_ned"
@@ -335,11 +339,8 @@ class EKFSLAMNode(object):
         w_ned_tfm_station.transform.rotation.z = lm3D.pose.pose.orientation.z
         w_ned_tfm_station.transform.rotation.w = lm3D.pose.pose.orientation.w
 
-        ekf_depth = Float64()
-        ekf_depth.data = lm3D.pose.pose.position.z
-
         self.publishers["Station_PoseCov"].publish(lm3D)
-        self.publishers["ekf_depth"].publish(ekf_depth)
+        
         self.broadcaster.sendTransform(w_ned_tfm_station)
 
         # odom_to_baselink = TransformStamped()
