@@ -7,6 +7,7 @@ import tf2_geometry_msgs
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool
+from nav_msgs.msg import Odometry
 
 
 import numpy as np
@@ -71,6 +72,8 @@ class EKFSLAMNode(object):
 
         self.time_last_meas = rospy.get_time()
 
+        self.odom_top = rospy.get_param('~odom_topic', '/sam/dr/dvl_dr') 
+
         # initialize publishers & subscribers
         self.subscribers = {}
         self.init_subscribers()
@@ -90,6 +93,8 @@ class EKFSLAMNode(object):
         self.subscribers["rd"] = rospy.Subscriber("/sam/core/thrust_vector_cmd", ThrusterAngles, self.updateDR, queue_size=1)
         self.subscribers["orientation"] = rospy.Subscriber("sam/sbg/ekf_quat", SbgEkfQuat, self.pitchCallback, queue_size=1)
         self.subscribers["depth"] = rospy.Subscriber("/sam/core/depth20_pressure", FluidPressure, self.depthCB, queue_size=1)
+        self.subscribers["dr"] = rospy.Subscriber(self.odom_top, Odometry, self.dr_cb, queue_size=1)
+        #TODO subscribe to dr, callback updates self.ekf.x
 
     def init_publishers(self):
         """ initialize ROS publishers and stores them in a dictionary"""
@@ -152,6 +157,11 @@ class EKFSLAMNode(object):
         except:
             print("[EKF] haven't seen station yet")
             pass
+    
+    def dr_cb(self, msg):
+        self.dr_x = msg.pose.pose.position.x
+        self.dr_y = msg.pose.pose.position.y
+        self.dr_yaw = msg.pose.pose.orientation.z
 
     def publishPoseCallBackVBS(self, msg):
         
@@ -159,6 +169,7 @@ class EKFSLAMNode(object):
         
 
     def updateEKF(self, msg):
+        #TODO First time seeing the station, send a 0 transform to gps_node to start the DR
         tic = rospy.Time.now()
         # Hacky outlier rejection
         if (rospy.get_time() - self.time_last_meas) > 5.:
